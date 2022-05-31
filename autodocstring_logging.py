@@ -8,8 +8,8 @@ LOG_FORMAT = "%(levelname)s %(filename)s:%(lineno)s: %(message)s"
 
 logger = logging.getLogger("auto_docstring")
 
-logger.setLevel(logging.WARNING)
-# logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 
 class _CustomFilter(logging.Filter, object):

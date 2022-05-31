@@ -387,6 +387,7 @@ def find_all_in_region(view, reg, what, blacklist=None, flags=0):
     p0 = reg.a
     while True:
         found_reg = view.find(what, p0, flags=flags)
+        logger.debug("Found regex! {}, {}".format(found_reg.a, found_reg.b))
         if found_reg.b == -1 or found_reg.a >= reg.b:
             break
         else:
@@ -450,10 +451,13 @@ def get_attr_type(value, default_type, existing_type):
     """
     snippet_default = r"${{NUMBER:{0}}}".format(default_type)
     if existing_type not in [default_type, snippet_default]:
+        logger.debug("Reutning snippet deafult?!")
+        print(existing_type)
         return existing_type
 
     value = value.strip()
     try:
+        logger.debug("Trying to find the type of {}".format(value))
         ret = ast.literal_eval(value).__class__.__name__
         if ret == None.__class__.__name__:
             ret = default_type
@@ -670,28 +674,64 @@ def parse_class_attributes(view, target, default_type, default_description):
     # find the attributes that are at the class' indent level, or are set
     # via. `self.*=*` in a method
     _, body_indent_txt, _ = get_indentation(view, target, module_decl=False)
-    attr_re = (r"(^{0}([A-Za-z0-9_]+)|"
-               r"^[^\S\n]*self\.([A-Za-z0-9_]+))\s*=".format(body_indent_txt))
+    logger.debug("body_indent_txt -> '{}'".format(body_indent_txt))
+    
+    #edit this regex.
+
+    variable_re = r"[A-Za-z0-9_]+"
+    annotation_re = r"{0}([ \t]*\:[ \t]*{0})?".format(variable_re)
+
+    self_vars_re = r"^[^\S\n]*self\.({0})\s*=".format(variable_re)
+    attr_re = (r"(^{0}({2})|{3})".format(body_indent_txt, variable_re, annotation_re, self_vars_re))
+    # attr_re = (r"^{0}({2})".format(body_indent_txt, variable_re, annotation_re, self_vars_re))
+
+
+    # orig
+    #attr_re = (r"(^{0}([A-Za-z0-9_]+)|"
+    #           r"^[^\S\n]*self\.([A-Za-z0-9_]+))\s*=".format(body_indent_txt))
+
+    logger.debug("attr_re -> {}".format(attr_re))
     all_attr_regions = find_all_in_region(view, body_region, attr_re,
                                           blacklist=blacklist)
 
+    logger.debug("Matches :: {}".format(all_attr_regions))
+
     for attr_reg in all_attr_regions:
-        name = view.substr(attr_reg).split('=')[0].strip()
+        logger.debug("region -> {}".format(view.substr(attr_reg)))
+        attr_string = view.substr(attr_reg)
+        if ':' in attr_string:
+            name = attr_string.split(':')[0].strip()
+        else:
+            name = attr_string.split('=')[0].strip()
+
         scope_name = view.scope_name(attr_reg.a)
+        logger.debug("scope name -> {}".format(scope_name))
+
+        logger.debug("Name -> {}".format(name))
         if name.startswith('self.'):
             name = name[len('self.'):]
         if name.startswith('_'):
             continue
-        if "string" in scope_name or "comment" in scope_name:
+        if "string" in scope_name or "comment" in scope_name or "function" in scope_name:
             continue
-
         # discover data type from declaration
         if name in attribs:
             existing_type = attribs[name].types
         else:
             existing_type = default_type
-        value = view.substr(view.line(attr_reg.a)).split('=')[1]
-        paramtype = get_attr_type(value, default_type, existing_type)
+
+        paramtype = default_type
+        if ':' in view.substr(view.line(attr_reg.a)):
+            paramtype = view.substr(view.line(attr_reg.a)).split(':')[1].strip()
+        if '=' in view.substr(view.line(attr_reg.a)):
+            value = view.substr(view.line(attr_reg.a)).split('=')[1]
+            if paramtype!=default_type:
+                p2 = get_attr_type(value, default_type, existing_type)
+                if p2 != default_type:
+                    paramtype = p2
+
+
+        logger.debug("paramtype -> {}".format(paramtype))
 
         if name in attribs:
             tag = attribs[name].tag
@@ -762,6 +802,7 @@ def snipify(_words, _use_snippet=False):
         _words = r"${{NUMBER:{0}}}".format(_words)
     return _words
 
+#check this part~!!!!
 def autodoc(view, edit, region, all_defs, desired_style, file_type,
             default_qstyle=None, update_only=False):
     """actually do the business of auto-documenting
@@ -985,7 +1026,12 @@ class AutoDocstringCommand(sublime_plugin.TextCommand):
             desired_style = get_desired_style(view, desire=to_style)
 
             defs = find_all_declarations(view, True)
+            
+            logger.debug("View is -> {}".format(view.file_name()))
+            filename = view.file_name()
             logger.debug("DEFS:: {}".format(defs))
+
+
 
             for region in view.sel():
                 autodoc(view, edit, region, defs, desired_style, file_type,
@@ -1095,6 +1141,8 @@ class AutoDocstringSnipCommand(sublime_plugin.TextCommand):
         Args:
             edit (type): Description
         """
+
+        logger.info("Starung to sdf ")
         view = self.view
         pt = view.sel()[0].a
         regA = sublime.Region(pt - 3, pt)
